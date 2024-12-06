@@ -3,17 +3,17 @@ import cv2 as cv2  # OpenCV for image handling
 import os
 from PIL import UnidentifiedImageError, Image
 import warnings
+import time
 warnings.filterwarnings("ignore", message="Corrupt JPEG data")
 BASE_DIR = os.path.dirname(os.path.abspath(__name__))
 print(BASE_DIR)
 
 class Convulutional_Neural_Network():
 
-    def __init__(self, input_nodes, output_nodes, conv_layer_kernels, conv_layer_activation_images, conv_layer_max_pool_images, conv_layer_2_activation_images=None, conv_layer_2_kernels=None, conv_layer_2_max_pool_images=None, conv_layer_stride=1):
+    def __init__(self, input_nodes, output_nodes, conv_layer_kernels, conv_layer_activation_images, conv_layer_max_pool_images, conv_layer_2_activation_images=None, conv_layer_2_kernels=None, conv_layer_2_max_pool_images=None):
         self.input_nodes = input_nodes 
         self.output_nodes = output_nodes
         self.conv_layer_kernels = conv_layer_kernels
-        self.conv_layer_stride = conv_layer_stride
         self.conv_layer_activation_images = conv_layer_activation_images
         self.conv_layer_max_pool_images = conv_layer_max_pool_images
         self.conv_layer_2_activation_images = conv_layer_2_activation_images
@@ -21,18 +21,22 @@ class Convulutional_Neural_Network():
         self.conv_layer_2_max_pool_images = conv_layer_2_max_pool_images
 
         # Intialize weights and bias for the fully connected layer
-        self.fully_connected_weights = np.random.randn(self.conv_layer_2_max_pool_images.shape[0] * self.conv_layer_2_max_pool_images.shape[1] * self.conv_layer_2_max_pool_images.shape[2], self.output_nodes)
+        self.fully_connected_weights = np.random.randn(self.conv_layer_2_max_pool_images.shape[0] * self.conv_layer_2_max_pool_images.shape[1] * self.conv_layer_2_max_pool_images.shape[2], self.output_nodes) * np.sqrt(2 / (self.conv_layer_2_max_pool_images.shape[0] * self.conv_layer_2_max_pool_images.shape[1] * self.conv_layer_2_max_pool_images.shape[2] + self.output_nodes))
         print("Full Connected Weights Shape: ",self.fully_connected_weights.shape)
-        self.bias_output = np.random.randn(1, self.output_nodes)
+        self.bias_output = np.random.randn(1, self.output_nodes) * np.sqrt(2 / (self.conv_layer_2_max_pool_images.shape[0] * self.conv_layer_2_max_pool_images.shape[1] * self.conv_layer_2_max_pool_images.shape[2] + self.output_nodes))
         print("Output Bias Shape: ",self.bias_output.shape)
 
 
         # Intialize bias for the convolutional layer
-        self.bias_conv_layer = np.random.randn(1, self.conv_layer_kernels.shape[0])
+        self.bias_conv_layer = np.random.randn(1, self.conv_layer_kernels.shape[0]) * np.sqrt(2 / (self.conv_layer_kernels.shape[0] + self.conv_layer_kernels.shape[1] * self.conv_layer_kernels.shape[2] * self.conv_layer_kernels.shape[3]))
         
-        self.bias_conv_layer_2 = np.random.randn(1, self.conv_layer_2_kernels.shape[0] // self.conv_layer_max_pool_images.shape[2])
+        self.bias_conv_layer_2 = np.random.randn(1, self.conv_layer_2_kernels.shape[0]) * np.sqrt(2 / (self.conv_layer_2_kernels.shape[0] + self.conv_layer_2_kernels.shape[1] * self.conv_layer_2_kernels.shape[2] * self.conv_layer_2_kernels.shape[3]))
         print("Conv Layer Bias Shape:\n ",self.bias_conv_layer.shape)
         print("Conv Layer 2 Bias Shape:\n ",self.bias_conv_layer_2.shape)
+    
+    def initialize_weights(input_dim, output_dim):
+        return np.random.randn(input_dim, output_dim) * np.sqrt(2 / (input_dim + output_dim))
+
     
     def relu(self, x):
         return np.maximum(0, x)    
@@ -40,7 +44,7 @@ class Convulutional_Neural_Network():
     def sigmoid(self, z_value):
         return 1/(1+np.exp(-z_value))
     
-    def derivative(self, output):
+    def sigmoid_derivative(self, output):
         return output * (1 - output)
     
     def mean_squared_error(self, target_output, output):
@@ -50,11 +54,37 @@ class Convulutional_Neural_Network():
         exps = np.exp(x - np.max(x))
         return exps / np.sum(exps)
     
-    def convulate(self, image, kernel, stride):
+    def softmax_derivative(self, output):
+        n = len(output)
+        jacobian = output.reshape(-1, 1) * np.eye(n) - np.dot(output, output.T)
+        return jacobian
+    
+    def cross_entropy(self, target_output, output):
+        return -np.sum(target_output * np.log(output))
+    
+    def calculate_delta(self, error, derivative):
+        return error * derivative
+    
+    def calculate_loss(self, y_true, y_pred):
+        epsilon = 1e-15  # To avoid log(0)
+        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)  # Prevent log(0) issues
+        loss = -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+        return loss
+
+    
+    def calculate_error(self, target_output, final_output):
+        return final_output - target_output
+    
+    def convulate(self, image, kernel, bias, activation_image, activation_function, stride):
         num_filters = kernel.shape[0]
-        patch_number = 0
-        activation_image_row = self.conv_layer_activation_images.shape[0]
-        activation_image_col = self.conv_layer_activation_images.shape[1]
+        activation_image_row = activation_image.shape[0]
+        activation_image_col = activation_image.shape[1]
+        # print("Activation Image Shape: ",activation_image.shape)
+        # print("Image Shape: ",image.shape)
+        # print("Kernel Shape: ",kernel.shape)
+        # print("Bias Shape: ",bias.shape)
+        # print("Num Filters: ",num_filters)
+        # print()
 
         for i in range(num_filters):
             for j in range(activation_image_row):
@@ -64,26 +94,19 @@ class Convulutional_Neural_Network():
                     end_row = start_row + kernel.shape[1]
                     start_col = k * stride
                     end_col = start_col + kernel.shape[2]
-                    # print("Start Row: ",start_row)
-                    # print("End Row: ",end_row)
-                    # print("Start Col: ",start_col)
-                    # print("End Col: ",end_col)
-                    # Extract the current patch from the image
-                    patch = image[start_row:end_row, start_col:end_col, :kernel.shape[3]]
-                    # print("Patch Shape: ",patch.shape)
 
-                    # Calculate the dot product of the patch and the kernel
-                    # print("Kernel Shape: ",self.conv_layer_kernels[i].shape)
-                    conv_value = np.sum(patch * self.conv_layer_kernels[i]) + self.bias_conv_layer[0, i]
+                    patch = image[start_row:end_row, start_col:end_col, :kernel.shape[3]]
+            
+                    conv_value = np.sum(patch * kernel[i]) + bias[0, i]
 
                     # Apply the ReLU activation function
-                    relu_value = self.relu(conv_value)
-
-                    self.conv_layer_activation_images[j, k, i] = relu_value
-
-                    patch_number += 1
-                    # print("Patch: \n",patch_number)
-
+                    if activation_function == 'relu':
+                        relu_value = self.relu(conv_value)
+                    else:
+                        relu_value = self.sigmoid(conv_value)
+    
+                    activation_image[j, k, i] = relu_value
+ 
     def max_pooling(self, stride, activation_images, max_pool_images):
         pool_size = 2  # Typically, max pooling uses a 2x2 pool size
         # Determine the shape of the output max-pooling images
@@ -96,73 +119,12 @@ class Convulutional_Neural_Network():
                     patch = activation_images[j:j+pool_size, k:k+pool_size, i]
 
                     # Calculate the max of the patch
-                    max_value = np.max(patch)
+                    max_value = np.average(patch)
 
                     # Store the result in the max pooling layer
                     max_pool_images[j // stride, k // stride, i] = max_value
-
-        # for max_pool_image in self.conv_layer_max_pool_images:
-        #     for activation_image in self.conv_layer_activation_images:  # Iterate over each image in the activation layer
-        #         for i in range(activation_image.shape[2]):  # Iterate over each filter
-        #             for j in range(0, activation_image.shape[0] - pool_size + 1, stride):  # Iterate over rows
-        #                 for k in range(0, activation_image.shape[1] - pool_size + 1, stride):  # Iterate over columns
-        #                     # Extract the patch of size (2, 2, depth) for pooling
-        #                     patch = activation_image[j:j+pool_size, k:k+pool_size, i]
-
-        #                     # Calculate the max of the patch
-        #                     max_value = np.max(patch)
-
-        #                     # Store the result in the max pooling layer
-        #                     max_pool_image[j // stride, k // stride, i] = max_value
     
-    def convulate_2(self, max_pool_images, kernel, stride):
-        num_filters = kernel.shape[0]
-        patch_number = 0
-        activation_image_row = self.conv_layer_2_activation_images.shape[0]
-        activation_image_col = self.conv_layer_2_activation_images.shape[1]
-
-        filters_across_images = max_pool_images.shape[2] # Number of filters altogether per images
-
-        number_of_filters = int(kernel.shape[0] / filters_across_images)
-        print("Number of Filters: ",number_of_filters)
-        # Use 16 filters across each image 32 times
-        kernel_index = 0
-        for i in range(0, num_filters, filters_across_images):
-            for j in range(activation_image_row):
-                for k in range(activation_image_col):
-                    # Calculate the starting and ending index of the patch for this filter
-                    start_row = j * stride
-                    end_row = start_row + kernel.shape[1]
-                    start_col = k * stride
-                    end_col = start_col + kernel.shape[2]
-
-                    # Extract the current patch from the images
-                    patches = []
-                    for f in range(self.conv_layer_activation_images.shape[2]):
-                        max_pool_image = max_pool_images[:, :, f]
-                        patches.append(max_pool_image[start_row:end_row, start_col:end_col])
-                    
-                    filters = []
-                    for l in range(filters_across_images):
-                        filters.append(kernel[i + l][2])
-                        # print("Kernel: ",kernel[0][i + l].shape)
-                    
-                    patches = np.array(patches)
-                    filters = np.array(filters)
-                    # print("Patches Shape: \n",patches.shape)
-                    # print("Kernel: \n",filters)
-                    
-                    conv_value = np.sum(patches * filters) + self.bias_conv_layer_2[0, kernel_index]
-
-                    # Apply the Sigmoid activation function
-                    relu_value = self.sigmoid(conv_value)
-                    # print("Relu Value: ",relu_value)
-                    self.conv_layer_2_activation_images[j, k, kernel_index] = relu_value
-
-                    # patch_number += 1
-                    # print("Patch: \n",patch_number)
-
-            kernel_index += 1
+    
         
 
 
@@ -172,81 +134,259 @@ class Convulutional_Neural_Network():
         flattened_images = flattened_images.flatten()
         return flattened_images
     
-    def forward_pass(self, X):
-        self.convulate(X, self.conv_layer_kernels, 1)
-        self.max_pooling(2, self.conv_layer_activation_images, self.conv_layer_max_pool_images)
-        self.convulate_2(self.conv_layer_max_pool_images, self.conv_layer_2_kernels, 1)
-        self.max_pooling(2, self.conv_layer_2_activation_images, self.conv_layer_2_max_pool_images)
-        self.flattened_images = self.flatten(self.conv_layer_2_max_pool_images)
+    def padding(self, image, padding_size):
+        padded_image = np.zeros((image.shape[0] + 2 * padding_size, image.shape[1] + 2 * padding_size, image.shape[2]))
+        padded_image[padding_size:-padding_size, padding_size:-padding_size] = image
+        return padded_image
+    
+    def rotate_np_image(self, image, angle):
+        return np.rot90(image, 2)
 
+    def backprop_convolution(self, d_kernel, d_bias, backprop_activation_images, patch_extraction_images):
+
+        # Iterate over the number of filters
+        # print("D Kernel Shape: ",d_kernel.shape)
+        # print("Backprop Activation Images Shape: ",backprop_activation_images.shape)
+        # print("Patch Extraction Images Shape: ",patch_extraction_images.shape)
+        for filter_index in range(d_kernel.shape[0]):
+            # Slide over the spatial dimensions of backprop_activation_images
+            for i in range(backprop_activation_images.shape[0]):
+                for j in range(backprop_activation_images.shape[1]):
+                    # print("J: ",j)
+                    # Define the patch of the max pool images corresponding to this position
+                    start_i = i  # Adjust for stride if necessary
+                    end_i = start_i + d_kernel.shape[1]
+                    start_j = j  # Adjust for stride if necessary
+                    end_j = start_j + d_kernel.shape[2]
+
+                    # Extract the patch
+                    patch = patch_extraction_images[start_i:end_i, start_j:end_j, :d_kernel.shape[3]]
+
+                    # Accumulate gradient for the kernel
+                    # print("D Kernel: ", d_kernel.shape)
+                    # print("Backprop Activation Images: ",backprop_activation_images.shape)
+                    d_kernel[filter_index] += backprop_activation_images[i, j, filter_index] * patch
+
+            # Accumulate gradient for the bias
+            d_bias[0, filter_index] += np.sum(backprop_activation_images[:, :, filter_index])
+
+        return d_kernel, d_bias
+    
+    def convolve_backprop_image_and_rotated_kernel(self, padded_activation_images, rotated_kernel, stride=1):
+        """
+        Perform convolution between the padded activation images and the rotated kernel.
+        :param padded_activation_images: Padded backpropagated activation images of shape (height, width, depth).
+        :param rotated_kernel: The kernel rotated by 180 degrees.
+        :param stride: The stride for the convolution. Default is 1.
+        :return: Convolution result (gradient with respect to activations).
+        """
+        # Unpack the kernel dimensions
+        num_filters, kernel_height, kernel_width, kernel_depth = rotated_kernel.shape
+        # print("Rotated Kernel Shape: ",rotated_kernel.shape)
+        
+        # Get the dimensions of the padded activation images
+        height, width, depth = padded_activation_images.shape
+        
+        # Calculate the output dimensions
+        output_height = (height - kernel_height) // stride + 1
+        output_width = (width - kernel_width) // stride + 1
+        
+        # Initialize the gradient (this will be the result of the convolution)
+        backprop_pooled_images = np.zeros((output_height, output_width, num_filters//2))
+        
+        # Perform the convolution
+        for i in range(output_height):
+            for j in range(output_width):
+                # Extract the patch from the padded activation images
+                patch = padded_activation_images[i*stride:i*stride+kernel_height, j*stride:j*stride+kernel_width, :kernel_depth]
+                # print("Patch Shape: ",patch.shape)
+                
+                # For each filter, convolve the patch with the rotated kernel
+                for f in range(num_filters // 2):  # Loop over filters (32 filters)
+                    backprop_pooled_images[i, j, f] = np.sum(patch * rotated_kernel[f])  # Sum over depth and kernel
+
+        return backprop_pooled_images
+    
+    def backprop_relu(self, d_relu, activation_images):
+        """
+        Backpropagate through the ReLU activation function.
+        :param d_relu: Gradient from the upper layer.
+        :param activation_images: Activations before the ReLU function.
+        """
+        d_activation = np.where(activation_images > 0, d_relu, 0)
+        return d_activation
+
+    def backprop_max_pooling(self, d_pooled, activation_images, pool_size=2):
+        """
+        Backpropagate through the pooling layer.
+        :param d_pooled: Gradient from the upper layer.
+        :param activation_images: Activations before pooling.
+        """
+        d_activation_layer = np.zeros_like(activation_images)
+
+        # print("Activation Layer Shape: ",d_activation_layer.shape)
+        # print("Pooled Layer Shape: ",d_pooled.shape)
+        for i in range(d_pooled.shape[2]):
+            for j in range(d_pooled.shape[0]):
+                for k in range(d_pooled.shape[1]):
+                    # Get the pooling region in the activation image
+                    h_start, h_end = j * pool_size, (j + 1) * pool_size
+                    w_start, w_end = k * pool_size, (k + 1) * pool_size
+                    
+                    # Get pooling region where the max value occurred
+                    pooling_region = activation_images[h_start:h_end, w_start:w_end, i]
+
+                    # Get the max value location
+                    max_val = np.max(pooling_region)
+                    mask = pooling_region == max_val            
+
+                    # Update the new activation layer
+                    d_activation_layer[h_start:h_end, w_start:w_end, i] = d_pooled[j, k, i] * mask
+
+        return d_activation_layer
+
+    def backprop_calculate_relu_derivative(self, activation_images):
+        """
+        Calculate the derivative of the ReLU activation function.
+        :param activation_images: Activations before the ReLU function.
+        """
+        return np.where(activation_images > 0, 1, 0)
+
+    def forward_pass(self, X):
+        self.convulate(X, self.conv_layer_kernels, self.bias_conv_layer, self.conv_layer_activation_images, 'relu', 1)
+        self.max_pooling(2, self.conv_layer_activation_images, self.conv_layer_max_pool_images)
+        self.convulate(self.conv_layer_max_pool_images, self.conv_layer_2_kernels, self.bias_conv_layer_2, self.conv_layer_2_activation_images, 'relu', 1)
+        self.max_pooling(2, self.conv_layer_2_activation_images, self.conv_layer_2_max_pool_images)
+        # print("Conv Layer 2 Max Pooling Images Shape: ",self.conv_layer_2_max_pool_images.shape)
+        self.flattened_images = self.conv_layer_2_max_pool_images.flatten().reshape(-1)
+        # print("Flattened Images Shape: ",self.flattened_images.shape)
         # Fully connected layer
         self.final_input = np.dot(self.flattened_images, self.fully_connected_weights) + self.bias_output
+        # print("Final Input: ",self.final_input)
         self.final_output = self.sigmoid(self.final_input)
         return self.final_output
 
     def backpropagation(self, X, y, learning_rate):
-        # 1. Compute the gradient of the loss with respect to the final output
-        output_error = self.final_output - y # This is the derivative of MSE w.r.t. output
-        print("Output Error: ",output_error)
-        d_output = self.derivative(self.final_output) * output_error  # This is the derivative of the sigmoid function
-        print("D Output: ",d_output)
-        d_output_delta = d_output * output_error
-        print("D Output Delta: ",d_output_delta)
-        d_output_change = np.dot(self.flattened_images.T, d_output_delta)  # Gradient of the weights of the fully connected layer
+        ############################################################################################################
+        ############################################################################################################
+        # Forward pass
+        print("Output: ",self.final_output)
+        print("Target: ",y)
         
-        # 2. Backpropagate the gradient through the fully connected layer
-        fully_conndected_error = np.dot(d_output, self.fully_connected_weights.T)  # Gradient of the fully connected layer
-        print("Fully Connected Error: ",fully_conndected_error)
-        # d_weights_fc = np.dot(self.flattened_images.T, d_output)  # Gradient of the weights of the fully connected layer
-        # print("Weights FC: ",d_weights_fc)
-        fully_conndected_delta = fully_conndected_error * self.derivative(self.flattened_images)
-        d_bias_fc = d_output  # Gradient of the bias of the fully connected layer
         
-        # Update fully connected weights and bias
-        self.fully_connected_weights -= learning_rate * d_output_change
-        self.bias_output -= learning_rate * d_bias_fc
+        # Calculate the output error
+        output_error = self.final_output - y  # For binary classification, this is the error (prediction - true)
+        
+        # Calculate the gradient of the output layer
+        output_derivative = self.sigmoid_derivative(self.final_output)
+        d_output_delta = output_error * output_derivative
+        print("D Output Delta : ",d_output_delta)
 
-        # 3. Backpropagate the gradient through the second convolutional layer (Conv Layer 2)
-        # We need to compute the gradient for the convolutional layer 2 weights, biases, and activations
-        d_activation_layer_2 = np.zeros_like(self.conv_layer_2_activation_images)
+        # Ensure self.flattened_images.T has the shape (3136, 1)
+        self.flattened_images = self.flattened_images.reshape(-1, 1)
         
-        for activation_image in self.conv_layer_2_activation_images:
-            i = 0
-            for j in range(activation_image.shape[1]):  # Iterate over the rows
-                for k in range(activation_image.shape[2]):  # Iterate over the columns
-                    d_activation_layer_2[i, j, k] = d_output[0, i]  # Propagate the output error backward
-            i += 1
+        # Update the weights using gradient descent (assuming no momentum, for simplicity)
+        weights_before = self.fully_connected_weights.copy()
+        # print("Fully Connected Weights Before: ",weights_before)
+        self.fully_connected_weights -= learning_rate * np.dot(self.flattened_images, d_output_delta)
+        # print("Fully Connected Weights After: ",self.fully_connected_weights)
+        print("Fully Connected Weights Change: ", np.sum(weights_before - self.fully_connected_weights))
+        self.bias_output -= learning_rate * np.sum(d_output_delta)
 
-        # Now compute the gradients for the kernels in Conv Layer 2
+        # ############################################################################################################
+        # ############################################################################################################
+        d_flattened_image_delta = np.dot(d_output_delta, self.fully_connected_weights.T)
+        # print("D Flattened Image Delta Shape: ",d_flattened_image_delta.shape)
+        delta_loss_over_delta_max_pool_2_images = d_flattened_image_delta.reshape(self.conv_layer_2_max_pool_images.shape)
+        # print("Delta Loss Over Delta Max Pool 2 Images Shape: ",delta_loss_over_delta_max_pool_2_images.shape)
+        
+
+        ############################################################################################################
+        ############################################################################################################
+        # Backpropagate through the second pooling layer
+
+        # Calculate the gradient of the loss with respect to the relu activation
+        backprop_derivative_images_layer_2 = self.backprop_max_pooling(delta_loss_over_delta_max_pool_2_images, self.conv_layer_2_activation_images)
+        # print("Backpropagated Derivative Images Layer 2 Shape: ",backprop_derivative_images_layer_2.shape)
+
+        # Calculate the gradient of the loss with respect to the convultional layer 2 images
+        conv_layer_2_relu_derivative = self.backprop_calculate_relu_derivative(self.conv_layer_2_activation_images)
+        # print("Conv Layer 2 ReLU Derivative: ",conv_layer_2_relu_derivative)
+        backprop_activation_images_layer_2 = np.multiply(backprop_derivative_images_layer_2, conv_layer_2_relu_derivative)
+        # print("Backpropagated Activation Images Shape: ",backprop_activation_images_layer_2.shape)
+
+        ############################################################################################################
+        ############################################################################################################
+        # Backpropagate through the second convolutional layer
+
+        # Calculate the gradient of the loss with respect to the kernel and bias
         d_kernel_2 = np.zeros_like(self.conv_layer_2_kernels)
-        for i in range(self.conv_layer_2_kernels.shape[0]):
-            for j in range(self.conv_layer_2_kernels.shape[1]):
-                for k in range(self.conv_layer_2_kernels.shape[2]):
-                    # Compute the gradient for each kernel by convolving the activation layer with the error
-                    d_kernel_2[i, j, k] = np.sum(d_activation_layer_2 * self.conv_layer_2_activation_images[:, j, k])
-        
-        # Update Conv Layer 2 kernels and biases
+        d_bias_2 = np.zeros_like(self.bias_conv_layer_2)
+        d_kernel_2, d_bias_2 = self.backprop_convolution(d_kernel_2, d_bias_2, backprop_activation_images_layer_2, self.conv_layer_max_pool_images)
+
+        # Update the kernel and bias for the second convolutional layer
+        kernel_before = self.conv_layer_2_kernels.copy()
         self.conv_layer_2_kernels -= learning_rate * d_kernel_2
-        self.bias_conv_layer_2 -= learning_rate * np.sum(d_activation_layer_2)
+        print("Kernel Layer 2 Weights Change: ",np.sum(kernel_before - self.conv_layer_2_kernels))
+        self.bias_conv_layer_2 -= learning_rate * d_bias_2
 
-        # 4. Backpropagate the gradient through the first convolutional layer (Conv Layer 1)
-        d_activation_layer_1 = np.dot(self.conv_layer_activation_images, d_activation_layer_2)  # Gradient of activation layer 1
-        d_kernel_1 = np.sum(d_activation_layer_1 * self.conv_layer_kernels, axis=0)  # Gradient of Conv Layer 1 kernel
+        ############################################################################################################
+        ############################################################################################################
+        # Backpropagate through the first pooling layer
 
-        # Update Conv Layer 1 kernels and biases
+        # Rotate the kernel by 180 degrees
+        rotated_kernel = np.rot90(self.conv_layer_2_kernels, 2)
+        # print("Rotated Kernel Shape: ",rotated_kernel.shape)
+
+        # Add padding to the backpropagated activation images
+        padding_size = self.conv_layer_2_kernels.shape[1] - 1
+        padded_backpropagated_activation_images = self.padding(backprop_activation_images_layer_2, padding_size)
+        # print("Padded Backpropagated Activation Images Shape: ",padded_backpropagated_activation_images.shape)
+
+        # Convolve the padded activation images with the rotated kernel
+        backprop_pool_2_images = self.convolve_backprop_image_and_rotated_kernel(padded_backpropagated_activation_images, rotated_kernel, 1)
+        # print("Backprop Layer 1 Pooled Images Shape: ",backprop_pool_2_images.shape)
+
+
+        ############################################################################################################
+        ############################################################################################################
+        # Backpropagate through the first convolutional layer
+
+        # Calculate backpropagation through the ReLU activation function
+        backprop_derivative_activation_images_layer_1 = self.backprop_max_pooling(backprop_pool_2_images, self.conv_layer_activation_images)
+        # print("Backprop ReLU Images Shape: ", backprop_derivative_activation_images_layer_1.shape)
+
+
+        # Calculate the gradient of the loss with respect to the relu activation
+        conv_layer_relu_derivative = self.backprop_calculate_relu_derivative(self.conv_layer_activation_images)
+        # print("Conv Layer 1 ReLU Derivative Shape: ",conv_layer_relu_derivative.shape)
+
+        # Calculate the gradient of the loss with respect to the activation images
+        backprop_activation_images_layer_1 = np.multiply(backprop_derivative_activation_images_layer_1, conv_layer_relu_derivative)
+        # print("Backprop Activation Images Layer 1 Shape: ",backprop_activation_images_layer_1.shape)
+
+
+        ############################################################################################################
+        ############################################################################################################
+        # Get the kernel and bias for the first convolutional layer
+        d_kernel_1 = np.zeros_like(self.conv_layer_kernels)
+        d_bias_1 = np.zeros_like(self.bias_conv_layer)
+        d_kernel_1, d_bias_1 = self.backprop_convolution(d_kernel_1, d_bias_1, backprop_activation_images_layer_1, X)
+
+
+        # Update the kernel and bias for the first convolutional layer
+        kernel_layer_1_before = self.conv_layer_kernels.copy()
         self.conv_layer_kernels -= learning_rate * d_kernel_1
-        self.bias_conv_layer -= learning_rate * np.sum(d_activation_layer_1)
+        print("Kernel Layer 1 Weights change: ",np.sum(kernel_layer_1_before - self.conv_layer_kernels))
+        self.bias_conv_layer -= learning_rate * d_bias_1
 
-        return output_error
-
-    
     def train(self, X, y, epochs, learning_rate):
         for epoch in range(epochs):
             output = self.forward_pass(X)
-            self.backpropagation(X, y, learning_rate)
-            if epoch % 1000 == 0:
-                loss = np.mean(np.square(y - output))
+            loss = self.cross_entropy(y, output)
+            if epoch % 1 == 0:
                 print(f"Epoch {epoch}, Loss: {loss}")
+            self.backpropagation(X, y, learning_rate)
                     
         
     
@@ -282,11 +422,15 @@ print("Images Shape: ", images.shape)
 
 
 # Create a neural network
+def initialize_weights(input_dim, output_dim):
+    return np.random.randn(input_dim, output_dim) * np.sqrt(2 / (input_dim + output_dim))
+
+
 
 ############################################
 # Convolutional Neural Network Parameters #
 ############################################
-input_nodes = 64 * 64 * 3
+input_nodes = images.shape[0] * images.shape[1] * images.shape[2]
 output_nodes = 2
 target = np.array([1, 0])
 
@@ -294,7 +438,7 @@ target = np.array([1, 0])
 ############################################
 # Convolutional Layer 1 Parameters #
 ############################################
-conv_layer_kernels = np.random.randn(16, 5, 5, 3)
+conv_layer_kernels = np.random.randn(8, 5, 5, images.shape[2]) * np.sqrt(2 / (8 + 5 * 5 * images.shape[2]))
 conv_layer_activation_images = (
 np.zeros((
     images.shape[0] - conv_layer_kernels.shape[1] + 1,
@@ -313,12 +457,12 @@ np.zeros((
 ############################################
 # Convolutional Layer 2 Parameters #
 ############################################
-conv_layer_2_kernels = np.random.randn(conv_layer_max_pooling_images.shape[2] * 32, 3, 3, 3)
+conv_layer_2_kernels = np.random.randn(16, 3, 3, conv_layer_max_pooling_images.shape[2]) * np.sqrt(2 / (16 + 3 * 3 * conv_layer_max_pooling_images.shape[2]))
 conv_layer_2_activation_images = (
 np.zeros((
     conv_layer_max_pooling_images.shape[0] - conv_layer_2_kernels.shape[1] + 1,
     conv_layer_max_pooling_images.shape[1] - conv_layer_2_kernels.shape[2] + 1,
-    conv_layer_max_pooling_images.shape[2] * 2
+    conv_layer_2_kernels.shape[0]
 )))
 
 conv_layer_2_max_pooling_images = (
@@ -334,7 +478,7 @@ print()
 
 print("Conv Layer Kernels Shape: ",conv_layer_kernels.shape)
 print("Activation Layer 1 Shape: \n",conv_layer_activation_images.shape)
-print("Conv Layer Max Pooling Layers Shape: ",conv_layer_max_pooling_images.shape)
+print("Conv Layer 1 Max Pooling Layers Shape: ",conv_layer_max_pooling_images.shape)
 
 
 print("\n")
@@ -356,9 +500,11 @@ nn = Convulutional_Neural_Network(
     conv_layer_2_max_pool_images=conv_layer_2_max_pooling_images
     )
 
-final_output = nn.forward_pass(images)
-print("Flattened Images Shape: ",nn.flattened_images.shape)
-print("Final Output: ",final_output)
+# start_time = time.time()
+# final_output = nn.forward_pass(images)
+# backprop = nn.backpropagation(images, target, 0.01)
+# print("Time Taken For One Epoch: ",time.time() - start_time)
+nn.train(images, target, 10000, 0.5)
 
 
 # nn.convulate(images, nn.conv_layer_kernels, 1)
@@ -371,10 +517,17 @@ print("Final Output: ",final_output)
 
 
 
-# Print ammount of activation layer 2 images
-# print("Conv Layer 2 Activation Images Shape: ",nn.conv_layer_2_activation_images.shape)
-# for filter_index in range(nn.conv_layer_2_activation_images.shape[2]):
-#     max_pool_image = nn.conv_layer_2_max_pool_images[:, :, filter_index]
+
+
+# for filter_index in range(nn.conv_layer_activation_images.shape[2]):
+    
+#     activation_image = conv_layer_activation_images[:, :, filter_index]
+
+#     cv2.imshow(f"Activation Image {filter_index} Shape: ",activation_image)
+#     cv2.waitKey(0)
+
+# for filter_index in range(nn.conv_layer_activation_images.shape[2]):
+#     max_pool_image = nn.conv_layer_max_pool_images[:, :, filter_index]
 #     print("Max Pool Image Shape: ",max_pool_image.shape)
 #     cv2.imshow(f"Max Pool Image {filter_index}", max_pool_image)
 #     cv2.waitKey(0)
@@ -385,17 +538,11 @@ print("Final Output: ",final_output)
 #     cv2.imshow(f"Activation Layer 2 Image {filter_index}", activation_layer_2_image)
 #     cv2.waitKey(0)
 
-# for filter_index in range(nn.conv_layer_activation_images.shape[2]):
-#     max_pool_image = nn.conv_layer_max_pool_images[:, :, filter_index]
-#     print("Max Pool Image Shape: ",max_pool_image.shape)
-#     cv2.imshow(f"Max Pool Image {filter_index}", max_pool_image)
-#     cv2.waitKey(0)
-
-# for filter_index in range(nn.conv_layer_activation_images.shape[2]):
-    
-#     activation_image = conv_layer_activation_images[:, :, filter_index]
-
-#     cv2.imshow(f"Activation Image {filter_index} Shape: ",activation_image)
+# # print("Conv Layer 2 Activation Images Shape: ",nn.conv_layer_2_activation_images.shape)
+# for filter_index in range(nn.conv_layer_2_activation_images.shape[2]):
+#     max_pool_image = nn.conv_layer_2_max_pool_images[:, :, filter_index]
+#     print("Max Pool 2 Image Shape: ",max_pool_image.shape)
+#     cv2.imshow(f"Max Pool Layer 2 Image {filter_index}", max_pool_image)
 #     cv2.waitKey(0)
 
 # print("Activation Layer 1 Size: ",len(nn.conv_layer_activation_images))
@@ -494,3 +641,86 @@ print("Final Output: ",final_output)
 # flattened_images = np.array(flattened_images)
 # flattened_images = flattened_images.flatten()
 # print("Flattened Images Shape: ",flattened_images.shape)
+
+
+
+
+
+
+
+
+
+
+
+# def convulate_2(self, max_pool_images, kernel, stride):
+    #     num_filters = kernel.shape[0]
+    #     activation_image_row = self.conv_layer_2_activation_images.shape[0]
+    #     activation_image_col = self.conv_layer_2_activation_images.shape[1]
+
+    #     filters_across_images = max_pool_images.shape[2] # Number of filters altogether per images
+
+    #     number_of_filters = int(kernel.shape[0] / filters_across_images)
+    #     print("Number of Filters: ",number_of_filters)
+    #     # Use 16 filters across each image 32 times
+    #     kernel_index = 0
+    #     for i in range(0, num_filters, filters_across_images):
+    #         for j in range(activation_image_row):
+    #             for k in range(activation_image_col):
+    #                 # Calculate the starting and ending index of the patch for this filter
+    #                 start_row = j * stride
+    #                 end_row = start_row + kernel.shape[1]
+    #                 start_col = k * stride
+    #                 end_col = start_col + kernel.shape[2]
+
+    #                 # Extract the current patch from the images
+    #                 patches = []
+    #                 for f in range(self.conv_layer_activation_images.shape[2]):
+    #                     max_pool_image = max_pool_images[:, :, f]
+    #                     patches.append(max_pool_image[start_row:end_row, start_col:end_col])
+                    
+    #                 filters = []
+    #                 for l in range(filters_across_images):
+    #                     filters.append(kernel[i + l][2])
+                    
+    #                 patches = np.array(patches)
+    #                 filters = np.array(filters)
+                    
+    #                 conv_value = np.sum(patches * filters) + self.bias_conv_layer_2[0, kernel_index]
+
+    #                 # Apply the Sigmoid activation function
+    #                 relu_value = self.relu(conv_value)
+
+    #                 self.conv_layer_2_activation_images[j, k, kernel_index] = relu_value
+
+    #         kernel_index += 1
+    # 
+    # 
+    # 
+    # 
+    # 
+    # 
+    # 
+    # self.flattened_images = self.flattened_images.reshape(-1, 1)
+        # print("Flattened Images : ",self.flattened_images)
+        # print("Flattened Images Shape: ",self.flattened_images.shape)
+        # output_error = self.cross_entropy(y, self.final_output)
+        # output_derivative = self.sigmoid_derivative(self.final_output)
+        # d_output_delta = self.calculate_delta(output_error, output_derivative)
+        # print("Final Output: ",self.final_output)  
+        # print("Target Output: ",y)   
+        # print("Output Error: ",output_error)
+        # print("Delta Output: ",d_output_delta)
+        # d_output_change = np.dot(self.flattened_images, d_output_delta)  
+        # delta_fully_connected_weights = np.dot(d_output_delta, self.flattened_images.T)
+        # delta_bias_output = np.sum(d_output_delta)
+
+        # # Update the weights and bias for the fully connected layer
+        # d_flattened_image_delta = np.dot(d_output_delta, self.fully_connected_weights.T)
+        # # print("Delta Flattened Image: ",d_flattened_image_delta)
+        
+        # weights_before = self.fully_connected_weights.copy()
+        # print("Fully Connected Weights Before: ",weights_before)
+        # self.fully_connected_weights -= learning_rate * d_output_change
+        # self.bias_output -= learning_rate * np.sum(d_output_delta)
+        # print("Fully Connected Weights After: ",self.fully_connected_weights)
+        # print("Weights Change: ", np.sum(weights_before - self.fully_connected_weights))
