@@ -4,3 +4,8 @@ neural_network/training_data
 /kagglecatsanddogs_5340
 /conv_neural_network/training_data
 /conv_neural_network/validation_data
+.cat_images.pth
+.cat_labels.pth
+.dog_images.pth
+.dog_labels.pth
+/trained_models
