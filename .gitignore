@@ -7,3 +7,4 @@ neural_network/training_data
 /trained_models
 /cnn_images_and_labels
 /trained_dog_models
+*.pth
