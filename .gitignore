@@ -6,3 +6,4 @@ neural_network/training_data
 /conv_neural_network/validation_data
 /trained_models
 /cnn_images_and_labels
+/trained_dog_models
