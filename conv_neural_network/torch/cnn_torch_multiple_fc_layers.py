@@ -545,8 +545,9 @@ class Convolutional_Neural_Network_Multiple_FC_Layers():
         # Separate cat and dog indices
         cat_indices = torch.where(y == 1)[0]
         dog_indices = torch.where(y == 0)[0]
-        print("Cat Indices: ",cat_indices)
-        print("Dog Indices: ",dog_indices)
+        # print("Cat Indices: ",cat_indices)
+        # print("Dog Indices: ",dog_indices)
+        # print("Cat Indices Shape: ",cat_indices.shape)
         
         # Get balanced dataset
         X_cat, y_cat = X[cat_indices], y[cat_indices]
@@ -747,84 +748,84 @@ print("Validation Cats Labels Shape: ",cat_labels.shape)
 print("\nValidation Dogs Shape: ",dog_images.shape)
 print("Validation Dogs Labels Shape: ",dog_labels.shape)
 
-# ##########################################
-# # Convolutional Neural Network Parameters #
-# ##########################################
-# input_nodes = images.shape[1] * images.shape[2] * images.shape[3] # Number of input nodes equals the number of pixels in an image
-# print("Images Shape: ",images.shape)
-# output_nodes = 1
-# target = labels
-# print("Target Shape: ",target.shape)
-# batch_size = 8
-# dropout_ratio = 0.3
-# lambda_l2 = 0.005
-# strides = [1,1,1,1]
-# weight_init = 'kaiming-out'
-# fc_weight_init = 'kaiming-in'
-# conv_layers = Convolutional_Layers_Torch(4, [[8,5], [16,3], [32,3], [64,3]], ['relu', 'relu', 'relu', 'relu'], images.shape, batch_size, strides, weight_init)
-# # conv_layers = Convolutional_Layers_Torch(3, [[8,5], [16,3], [32,3]], ['relu', 'relu', 'relu'], images.shape, batch_size, strides, weight_init)
-# # conv_layers = Convolutional_Layers_Torch(2, [[8,5], [16,3]], ['relu', 'relu'], images.shape, batch_size, strides, weight_init)
-# for i in range(len(conv_layers.conv_layers)):
-#     print("\nLayer: ",i)
-#     print("Kernels: ",conv_layers.conv_layers[i].kernels.shape)
-#     print("Activation Images: ",conv_layers.conv_layers[i].activation_images.shape)
-#     print("Max Pool Images: ",conv_layers.conv_layers[i].max_pool_images.shape)
-#     print("Activation Function: ",conv_layers.conv_layers[i].activation_func)
-#     print("\n")
+##########################################
+# Convolutional Neural Network Parameters #
+##########################################
+input_nodes = images.shape[1] * images.shape[2] * images.shape[3] # Number of input nodes equals the number of pixels in an image
+print("Images Shape: ",images.shape)
+output_nodes = 1
+target = labels
+print("Target Shape: ",target.shape)
+batch_size = 8
+dropout_ratio = 0.3
+lambda_l2 = 0.005
+strides = [1,1,1,1]
+weight_init = 'kaiming-out'
+fc_weight_init = 'kaiming-in'
+conv_layers = Convolutional_Layers_Torch(4, [[8,5], [16,3], [32,3], [64,3]], ['relu', 'relu', 'relu', 'relu'], images.shape, batch_size, strides, weight_init)
+# conv_layers = Convolutional_Layers_Torch(3, [[8,5], [16,3], [32,3]], ['relu', 'relu', 'relu'], images.shape, batch_size, strides, weight_init)
+# conv_layers = Convolutional_Layers_Torch(2, [[8,5], [16,3]], ['relu', 'relu'], images.shape, batch_size, strides, weight_init)
+for i in range(len(conv_layers.conv_layers)):
+    print("\nLayer: ",i)
+    print("Kernels: ",conv_layers.conv_layers[i].kernels.shape)
+    print("Activation Images: ",conv_layers.conv_layers[i].activation_images.shape)
+    print("Max Pool Images: ",conv_layers.conv_layers[i].max_pool_images.shape)
+    print("Activation Function: ",conv_layers.conv_layers[i].activation_func)
+    print("\n")
+
+print("\n")
+# Print shape of last conv layer
+print("Last Conv Layer: ",conv_layers.conv_layers[-1].max_pool_images.shape)
+print("Last Conv Layer Flatten: ",conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape)
+num_features = conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape[1]
+print("Num Features: ",num_features)
+# fully_connected_layers = Fully_Connected_Layers_Torch(5, output_sizes=[num_features, num_features*2, num_features, num_features // 2, output_nodes], activation_funcs=['relu', 'relu', 'relu', 'relu', 'sigmoid'])
+fully_connected_layers = Fully_Connected_Layers_Torch(3, output_sizes=[num_features, num_features*2, output_nodes], activation_funcs=['relu', 'relu', 'sigmoid'], weight_init=fc_weight_init)
+for i in range(len(fully_connected_layers)):
+    print("Fully Connected Layer: ",i)
+    print("Weights: ",fully_connected_layers[i].weights.shape)
+    print("Biases: ",fully_connected_layers[i].biases.shape)
+    print("Activation Function: ",fully_connected_layers[i].activation_func)
+    print("\n")
+cnn = Convolutional_Neural_Network_Multiple_FC_Layers(
+    input_nodes, 
+    output_nodes,
+    conv_layers,
+    fully_connected_layers,
+    dropout_ratio=dropout_ratio,
+    lambda_l2=lambda_l2
+    )
+
+
+# start_time = time.time()
+# output = cnn.forward_pass_batch_conv2d(images[:batch_size])
+# print(f"Time Taken Forward Pass: {time.time() - start_time}")
+# print("\n")
+# print("All Dropout Masks: ")
+# for i in range(len(cnn.dropout_mask)):
+#     print("Dropout Mask: ",cnn.dropout_mask[i].shape)
 
 # print("\n")
-# # Print shape of last conv layer
-# print("Last Conv Layer: ",conv_layers.conv_layers[-1].max_pool_images.shape)
-# print("Last Conv Layer Flatten: ",conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape)
-# num_features = conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape[1]
-# print("Num Features: ",num_features)
-# # fully_connected_layers = Fully_Connected_Layers_Torch(5, output_sizes=[num_features, num_features*2, num_features, num_features // 2, output_nodes], activation_funcs=['relu', 'relu', 'relu', 'relu', 'sigmoid'])
-# fully_connected_layers = Fully_Connected_Layers_Torch(3, output_sizes=[num_features, num_features*2, output_nodes], activation_funcs=['relu', 'relu', 'sigmoid'], weight_init=fc_weight_init)
-# for i in range(len(fully_connected_layers)):
-#     print("Fully Connected Layer: ",i)
-#     print("Weights: ",fully_connected_layers[i].weights.shape)
-#     print("Biases: ",fully_connected_layers[i].biases.shape)
-#     print("Activation Function: ",fully_connected_layers[i].activation_func)
-#     print("\n")
-# cnn = Convolutional_Neural_Network_Multiple_FC_Layers(
-#     input_nodes, 
-#     output_nodes,
-#     conv_layers,
-#     fully_connected_layers,
-#     dropout_ratio=dropout_ratio,
-#     lambda_l2=lambda_l2
-#     )
+
+# start_time = time.time()
+# output_2 = cnn.forward_pass_batch_conv2d(images[:batch_size])
+# print(f"Time Taken Forward Pass Conv2d: {time.time() - start_time}")
+# print("\n")
+# # # print("Output Shape: ",output_2.shape)
+# # # print("Output: ",output_2)
+
+# start_time = time.time()
+# cnn.backpropagation_batch(images[:batch_size], target[:batch_size], 0.001)
+# print(f"Time Taken BackProp: {time.time() - start_time}")
 
 
-# # start_time = time.time()
-# # output = cnn.forward_pass_batch_conv2d(images[:batch_size])
-# # print(f"Time Taken Forward Pass: {time.time() - start_time}")
-# # print("\n")
-# # print("All Dropout Masks: ")
-# # for i in range(len(cnn.dropout_mask)):
-# #     print("Dropout Mask: ",cnn.dropout_mask[i].shape)
+images = torch.cat((images[:100], images[7000:7100]), dim=0)
+target = torch.cat((target[:100], target[7000:7100]), dim=0)
 
-# # print("\n")
-
-# # start_time = time.time()
-# # output_2 = cnn.forward_pass_batch_conv2d(images[:batch_size])
-# # print(f"Time Taken Forward Pass Conv2d: {time.time() - start_time}")
-# # print("\n")
-# # # # print("Output Shape: ",output_2.shape)
-# # # # print("Output: ",output_2)
-
-# # start_time = time.time()
-# # cnn.backpropagation_batch(images[:batch_size], target[:batch_size], 0.001)
-# # print(f"Time Taken BackProp: {time.time() - start_time}")
-
-
-# images = torch.cat((images[:100], images[6000:6100]), dim=0)
-# target = torch.cat((target[:100], target[6000:6100]), dim=0)
-
-# cnn.train(images, target, 10000, 0.001, batch_size)
-# if os.path.exists("cnn_multiple_fc_model.pth"):
-#     os.remove("cnn_multiple_fc_model.pth")
-# cnn.save("cnn_multiple_fc_model.pth")
+cnn.train(images, target, 10000, 0.001, batch_size)
+if os.path.exists("cnn_multiple_fc_model.pth"):
+    os.remove("cnn_multiple_fc_model.pth")
+cnn.save("cnn_multiple_fc_model.pth")
 
 
 

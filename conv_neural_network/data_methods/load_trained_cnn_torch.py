@@ -1,12 +1,14 @@
+import torch
 import os
 import cv2
-import torch
-from cnn_torch import Convolutional_Neural_Network  # Import your custom class
-from cnn_torch_multiple_fc_layers import Convolutional_Neural_Network_Multiple_FC_Layers  # Import your custom class
-from conv_layer_list_torch import Convolutional_Layers_Torch  # Import your custom class
-from conv_layer_torch import Convolution_Layer_Torch  # Import your custom class
-from fully_connected_layer_list_torch import Fully_Connected_Layers_Torch  # Import your custom class
-from fully_connected_layer_torch import Fully_Connected_Layer  # Import your custom class
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from torch.cnn_torch import Convolutional_Neural_Network  # Import your custom class
+from torch.cnn_torch_multiple_fc_layers import Convolutional_Neural_Network_Multiple_FC_Layers  # Import your custom class
+from architecture.conv_layer_list_torch import Convolutional_Layers_Torch  # Import your custom class
+from architecture.conv_layer_torch import Convolution_Layer_Torch  # Import your custom class
+from architecture.fully_connected_layer_list_torch import Fully_Connected_Layers_Torch  # Import your custom class
+from architecture.fully_connected_layer_torch import Fully_Connected_Layer  # Import your custom class
 
 torch.serialization.add_safe_globals([Convolutional_Layers_Torch])
 torch.serialization.add_safe_globals([Convolution_Layer_Torch])
