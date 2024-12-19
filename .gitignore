@@ -1,0 +1,6 @@
+.env
+neural_network/training_data
+/validation_data
+/kagglecatsanddogs_5340
+/conv_neural_network/training_data
+/conv_neural_network/validation_data
