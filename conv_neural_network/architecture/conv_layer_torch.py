@@ -22,6 +22,12 @@ class Convolution_Layer_Torch():
             torch.nn.init.kaiming_normal_(self.kernels, mode='fan_avg', nonlinearity='relu', a=0)
         elif weight_init == "kaiming-uniform":
             torch.nn.init.kaiming_uniform_(self.kernels, a=0)
+        elif weight_init == "kaiming-uniform-relu":
+            torch.nn.init.kaiming_uniform_(self.kernels, nonlinearity='relu', a=0)
+        elif weight_init == "kaiming-uniform-relu-out":
+            torch.nn.init.kaiming_uniform_(self.kernels, mode='fan_out', nonlinearity='relu', a=0)
+        elif weight_init == "kaiming-uniform-relu-in":
+            torch.nn.init.kaiming_uniform_(self.kernels, mode='fan_in', nonlinearity='relu', a=0)
         else:
             torch.nn.init.kaiming_normal_(self.kernels, mode='fan_out', nonlinearity='relu', a=0)
         self.activation_func = activation_func
