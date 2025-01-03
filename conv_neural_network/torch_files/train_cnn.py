@@ -6,10 +6,10 @@ from cnn_torch import Convolutional_Neural_Network  # Import your custom class
 from architecture.conv_layer_list_torch import Convolutional_Layers_Torch
 from data_methods.get_cnn_training_data_torch import images, labels
 
-# device = torch.device("gpu" if torch.cuda.is_available() else "cpu")
-# device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
-# print("Device: ",device)
-# torch.set_default_device(device)
+device = torch.device("gpu" if torch.cuda.is_available() else "cpu")
+device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+print("Device: ",device)
+torch.set_default_device(device)
 
 # Create Model Parameters
 input_nodes = images.shape[1] * images.shape[2] * images.shape[3] # Number of input nodes equals the number of pixels in an image

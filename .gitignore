@@ -8,3 +8,4 @@ neural_network/training_data
 /cnn_images_and_labels
 /trained_dog_models
 *.pth
+*.zip

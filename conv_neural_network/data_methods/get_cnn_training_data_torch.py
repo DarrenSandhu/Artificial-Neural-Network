@@ -11,7 +11,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_default_device(device)
 
 
-def load_data(animal, label):
+def load_data(animal, label, split=0.8):
     images, labels = [], []
     try:
         # Try loading pre-saved data
@@ -28,7 +28,7 @@ def load_data(animal, label):
         files = os.listdir(directory)
         
         image_size = (64, 64)
-        for filename in files[:6000]:
+        for filename in files:
             img_path = os.path.join(directory, filename)
             if not os.path.exists(img_path):
                 print(f"File not found: {img_path}")

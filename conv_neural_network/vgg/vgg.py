@@ -1,8 +1,13 @@
+import datetime
 import torch
 import torch.nn.functional as F
 import time
 import math
 import numpy as np
+import sys
+print("Python Version: ",sys.version)
+print("Sys Path: ",sys.path)
+print()
 from torch import nn
 from architecture.vgg_layer_list_torch import VGG_Layers_Torch
 from architecture.fully_connected_layer_list_torch import Fully_Connected_Layers_Torch
@@ -189,7 +194,7 @@ class VGG():
         # print("Kernels Shape: ",reshaped_kernels.shape)
         # print("Biases Shape: ",biases.shape)
 
-        reshaped_output = F.conv2d(X_batch, reshaped_kernels, bias=biases, stride=stride) 
+        reshaped_output = F.conv2d(X_batch, reshaped_kernels, bias=biases, stride=stride, padding=padding_size)
         # print("Reshaped Output Shape: ",reshaped_output.shape)
         # # Check if activation image size is even
         # if reshaped_output.shape[2] != activation_images.shape[1]:
@@ -522,8 +527,6 @@ class VGG():
 
         conv_index = len(self.conv_layers) - 1
         for i in range(len(self.conv_layers.conv_blocks) - 1, -1, -1):
-            # print(f"\nConv Block Size: {len(conv_block)}")
-            # print(f"\nConv Block: {i}")
             conv_block = self.conv_layers.conv_blocks[i]
             for j in range(len(conv_block) - 1, -1, -1):
                 conv = conv_block[j]
@@ -582,15 +585,6 @@ class VGG():
                 if i == 0 and j == 0:
                     continue
                 else:
-                    # rotated_kernel = torch.rot90(conv.kernels, 2)
-                    # padded_backprop_images = self.padding(delta_loss_over_delta_z_matrix, conv.kernels.shape[1] - 1)
-                    # # print("Padded Backprop Images: ",padded_backprop_images.shape)
-                    # backprop_pool_images = self.convolve_backprop_image_and_rotated_kernel(
-                    #     padded_backprop_images, 
-                    #     rotated_kernel, 
-                    #     1, 
-                    #     self.conv_layers.getLayer(conv_index - 1).activation_images.shape[3]
-                    # )
                     # Compute gradients using conv_transpose2d
                     grad_input = F.conv_transpose2d(
                         delta_loss_over_delta_z_matrix.permute(0, 3, 1, 2), 
@@ -599,9 +593,7 @@ class VGG():
                         padding=0
                     )
                     grad_input = grad_input.permute(0, 2, 3, 1)
-                    # print("Grad Input: ",grad_input.shape)
                     delta_loss_over_delta_max_pool_images = grad_input
-                    # print("Delta Loss Over Delta Max Pool Images: ",delta_loss_over_delta_max_pool_images.shape)
 
                 conv_index -= 1
         
@@ -629,6 +621,8 @@ class VGG():
         # Separate cat and dog indices
         cat_indices = torch.where(y == 1)[0]
         dog_indices = torch.where(y == 0)[0]
+        print(f"Cat Indices: {cat_indices}")
+        print(f"Dog Indices: {dog_indices}")
         
         # Get balanced dataset
         X_cat, y_cat = X[cat_indices], y[cat_indices]
@@ -713,6 +707,10 @@ class VGG():
             print(f"  Epoch Time: {time.time() - epoch_start_time:.4f} sec")
             print(f"  Validation Accuracy Cats: {validation_accuracy_cats:.2f}%")
             print(f"  Validation Accuracy Dogs: {validation_accuracy_dogs:.2f}%")
+            if torch.cuda.is_available():
+                print(f"  GPU Memory Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                print(f"  GPU Memory Cached: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+            print(f"  Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print("--------------------------------------------------")
             print()
             
@@ -743,6 +741,7 @@ class VGG():
             # Skip if batch is incomplete
             if len(X_batch) < batch_size:
                 continue
+
             
             # Forward pass
             output = self.forward_pass_batch_vgg(X_batch, training=False)
@@ -801,96 +800,97 @@ class VGG():
 
 
 
-# ##########################################
-# # Convolutional Neural Network Parameters #
-# ##########################################
-# input_nodes = images.shape[1] * images.shape[2] * images.shape[3] # Number of input nodes equals the number of pixels in an image
-# print("Images Shape: ",images.shape)
-# output_nodes = 1
-# target = labels
-# print("Target Shape: ",target.shape)
-# batch_size = 16
-# dropout_ratio = 0.3
-# lambda_l2 = 0.0003
-# strides = [1,1]
-# conv_blocks =[3,3]
-# weight_init = 'kaiming-in'
-# # conv_layers = Convolutional_Layers_Torch(3, [[8,5], [16,3], [32,3]], ['relu', 'relu', 'relu'], images.shape, batch_size)
-# conv_layers = VGG_Layers_Torch(2, [[8,5], [16,3]], ['relu', 'relu'], images.shape, batch_size, conv_block=conv_blocks, strides=strides, weight_init=weight_init)
-# for i in range(len(conv_layers.conv_layers)):
-#     print("\nLayer: ",i)
-#     print("Kernels: ",conv_layers.conv_layers[i].kernels.shape)
-#     print("Activation Images: ",conv_layers.conv_layers[i].activation_images.shape)
-#     print("Max Pool Images: ",conv_layers.conv_layers[i].max_pool_images.shape)
-#     print("Activation Function: ",conv_layers.conv_layers[i].activation_func)
-#     print("\n")
+##########################################
+# Convolutional Neural Network Parameters #
+##########################################
+input_nodes = images.shape[1] * images.shape[2] * images.shape[3] # Number of input nodes equals the number of pixels in an image
+print("Images Shape: ",images.shape)
+output_nodes = 1
+target = labels
+print("Target Shape: ",target.shape)
+batch_size = 16
+dropout_ratio = 0.3
+lambda_l2 = 0.0003
+strides = [1,1]
+conv_blocks =[3,3]
+weight_init = 'kaiming-in'
+# conv_layers = Convolutional_Layers_Torch(3, [[8,5], [16,3], [32,3]], ['relu', 'relu', 'relu'], images.shape, batch_size)
+conv_layers = VGG_Layers_Torch(2, [[8,5], [16,3]], ['relu', 'relu'], images.shape, batch_size, conv_block=conv_blocks, strides=strides, weight_init=weight_init)
+for i in range(len(conv_layers.conv_layers)):
+    print("\nLayer: ",i)
+    print("Kernels: ",conv_layers.conv_layers[i].kernels.shape)
+    print("Activation Images: ",conv_layers.conv_layers[i].activation_images.shape)
+    print("Max Pool Images: ",conv_layers.conv_layers[i].max_pool_images.shape)
+    print("Activation Function: ",conv_layers.conv_layers[i].activation_func)
+    print("\n")
 
+print("\n")
+# Print shape of last conv layer
+print("Last Conv Layer: ",conv_layers.conv_layers[-1].max_pool_images.shape)
+print("Last Conv Layer Flatten: ",conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape)
+num_features = conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape[1]
+print("Num Features: ",num_features)
+
+fully_connected_layers = Fully_Connected_Layers_Torch(3, output_sizes=[num_features, 512, output_nodes], activation_funcs=['relu', 'relu', 'sigmoid'])
+for i in range(len(fully_connected_layers)):
+    print("Fully Connected Layer: ",i)
+    print("Weights: ",fully_connected_layers[i].weights.shape)
+    print("Biases: ",fully_connected_layers[i].biases.shape)
+    print("Activation Function: ",fully_connected_layers[i].activation_func)
+    print("\n")
+cnn = VGG(
+    input_nodes, 
+    output_nodes,
+    conv_layers,
+    fully_connected_layers,
+    dropout_ratio=dropout_ratio,
+    lambda_l2=lambda_l2
+    )
+
+for i in range(len(cnn.conv_layers.conv_blocks)):
+    print("Conv Block: ",i)
+    for j in range(len(cnn.conv_layers.conv_blocks[i])):
+        print("Conv Layer: ",j)
+        print("Kernels: ",cnn.conv_layers.conv_blocks[i][j].kernels.shape)
+        print("Activation Images: ",cnn.conv_layers.conv_blocks[i][j].activation_images.shape)
+        print("Max Pool Images: ",cnn.conv_layers.conv_blocks[i][j].max_pool_images.shape)
+        print("Activation Function: ",cnn.conv_layers.conv_blocks[i][j].activation_func)
+        print("Bias: ",cnn.bias_conv_layers[i].shape)
+        print("\n")
+    print("\n")
+
+# # cnn_2 = Convolutional_Neural_Network(
+# #     input_nodes, 
+# #     output_nodes,
+# #     conv_layers,
+# #     )
+
+# start_time = time.time()
+# output = cnn.forward_pass_batch_vgg(images[:batch_size])
+# print(f"Time Taken Forward Pass: {time.time() - start_time}")
 # print("\n")
-# # Print shape of last conv layer
-# print("Last Conv Layer: ",conv_layers.conv_layers[-1].max_pool_images.shape)
-# print("Last Conv Layer Flatten: ",conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape)
-# num_features = conv_layers.conv_layers[-1].max_pool_images.view(batch_size, -1).shape[1]
-# print("Num Features: ",num_features)
-# fully_connected_layers = Fully_Connected_Layers_Torch(3, output_sizes=[num_features, 512, output_nodes], activation_funcs=['relu', 'relu', 'sigmoid'])
-# for i in range(len(fully_connected_layers)):
-#     print("Fully Connected Layer: ",i)
-#     print("Weights: ",fully_connected_layers[i].weights.shape)
-#     print("Biases: ",fully_connected_layers[i].biases.shape)
-#     print("Activation Function: ",fully_connected_layers[i].activation_func)
-#     print("\n")
-# cnn = VGG(
-#     input_nodes, 
-#     output_nodes,
-#     conv_layers,
-#     fully_connected_layers,
-#     dropout_ratio=dropout_ratio,
-#     lambda_l2=lambda_l2
-#     )
+# print("Output: ",output)
+# # print("All Dropout Masks: ")
+# # for i in range(len(cnn.dropout_mask)):
+# #     print("Dropout Mask: ",cnn.dropout_mask[i].shape)
 
-# for i in range(len(cnn.conv_layers.conv_blocks)):
-#     print("Conv Block: ",i)
-#     for j in range(len(cnn.conv_layers.conv_blocks[i])):
-#         print("Conv Layer: ",j)
-#         print("Kernels: ",cnn.conv_layers.conv_blocks[i][j].kernels.shape)
-#         print("Activation Images: ",cnn.conv_layers.conv_blocks[i][j].activation_images.shape)
-#         print("Max Pool Images: ",cnn.conv_layers.conv_blocks[i][j].max_pool_images.shape)
-#         print("Activation Function: ",cnn.conv_layers.conv_blocks[i][j].activation_func)
-#         print("Bias: ",cnn.bias_conv_layers[i].shape)
-#         print("\n")
-#     print("\n")
-
-# # # cnn_2 = Convolutional_Neural_Network(
-# # #     input_nodes, 
-# # #     output_nodes,
-# # #     conv_layers,
-# # #     )
-
-# # start_time = time.time()
-# # output = cnn.forward_pass_batch_vgg(images[:batch_size])
-# # print(f"Time Taken Forward Pass: {time.time() - start_time}")
 # # print("\n")
-# # print("Output: ",output)
-# # # print("All Dropout Masks: ")
-# # # for i in range(len(cnn.dropout_mask)):
-# # #     print("Dropout Mask: ",cnn.dropout_mask[i].shape)
-
-# # # print("\n")
-
-# # # start_time = time.time()
-# # # output_2 = cnn.forward_pass_batch_conv2d(images[:batch_size])
-# # # print(f"Time Taken Forward Pass Conv2d: {time.time() - start_time}")
-# # # print("\n")
-
 
 # # start_time = time.time()
-# # cnn.backpropagation_batch(images[:batch_size], target[:batch_size], 0.001)
-# # print(f"Time Taken BackProp: {time.time() - start_time}")
+# # output_2 = cnn.forward_pass_batch_conv2d(images[:batch_size])
+# # print(f"Time Taken Forward Pass Conv2d: {time.time() - start_time}")
+# # print("\n")
 
-# images = torch.cat((images[:100], images[1000:1100]), dim=0)
-# target = torch.cat((target[:100], target[1000:1100]), dim=0)
 
-# cnn.train(images, target, 10000, 0.001, batch_size)
-# cnn.save("cnn_multiple_fc_model.pth")
+# start_time = time.time()
+# cnn.backpropagation_batch(images[:batch_size], target[:batch_size], 0.001)
+# print(f"Time Taken BackProp: {time.time() - start_time}")
+
+images = torch.cat((images[:100], images[1000:1100]), dim=0)
+target = torch.cat((target[:100], target[1000:1100]), dim=0)
+
+cnn.train(images, target, 10000, 0.001, batch_size)
+cnn.save("cnn_multiple_fc_model.pth")
 
 
 
